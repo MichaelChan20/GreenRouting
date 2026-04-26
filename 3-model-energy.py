@@ -111,79 +111,9 @@ Please only respond with a codeblock and do not explain anything. Complete the f
 '''.strip().format(languge.lower(), question.strip())
 
 
-def get_function_name(question: str, lang: str):
-    func_lines = [x for x in question.strip().split('\n') if x.strip()]
-    print(func_lines)
-    if lang.lower() == 'python':
-        func_idx = [i for i in range(len(func_lines)) if func_lines[i].startswith("def ")][-1]
-        func_name = func_lines[func_idx].split('(')[0].strip()
-        func_prefix = "\n".join(func_lines[:func_idx])
-        return func_name, func_prefix
-    
-    func_name = func_lines[-1].split('{')[0].strip()
-    func_prefix = "\n".join(func_lines[:-1])
-    return func_name, func_prefix
 
-def extract_generation_code(example: str, verbose: bool=False):
-    #task_id = example['task_id']
-    output = example.get('output', example.get("gpt_completion"))
-    question = example["prompt"].strip()
-    setting = {
-        'full_name': 'Python',
-        'indent': 2,
-    }
-    lang = setting['full_name']
-    indent = setting['indent']
-    #print(output)
-    try:
-        code_block: str = re.findall(f'```{lang.lower()}\n(.*?)```', output, re.DOTALL | re.IGNORECASE)[0]
-        if verbose:
-            print(">>> Task: {}\n{}".format(task_id, code_block))
-        
-        # Remove main
-        if setting.get('main', None) and setting['main'] in code_block:
-            main_start = code_block.index(setting['main'])
-            code_block = code_block[:main_start]
-        
-        func_name, func_prefix = get_function_name(question, lang)
 
-        try:
-            start = code_block.lower().index(func_name.lower())
-            indent = 0
-            while start - indent >= 0 and code_block[start - indent-1] == ' ':
-                indent += 1
-            
-            try:
-                end = code_block.rindex('\n' + ' '*indent + '}')
-            except:
-                end = len(code_block)
-        except:
-            start = 0
-            try:
-                end = code_block.rindex('\n' + ' '*indent + '}')
-            except:
-                end = len(code_block)
 
-        body = code_block[start:end]
-
-    
-        generation = func_prefix + '\n' + body + '\n'
-        example['generation'] = generation
-
-    except Exception as ex:
-        print("Failed to extract code block with error `{}`:\n>>> Task: {}\n>>> Output:\n{}".format(
-            ex, task_id, output
-        ))
-        example['generation'] = example['prompt'] + '\n' + output
-    
-    return example
-
-def extract_codeblock(text: str) -> str:
-    pattern = r"```python\s*(.*?)```"
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-    return ""
 
 def generate_one(example, tokenizer, model):
     prompt = build_instruction('Python', example['prompt'])
@@ -277,131 +207,104 @@ def embed_texts(texts, tokenizer, model, batch_size=1):
 
 
 def main(model_names, batch_number, sleep_seconds, iterations=10):
-    iterations = 30
+    iterations = 10
     sleep_seconds = 15
     eval_dataset = load_dataset("openai/openai_humaneval", split="test")
     mbpp_dataset = load_dataset("mbpp")
     #eval_dataset = eval_dataset.select(range(2))
     
-    # models = {}
-    # for model_name in model_names:
-    #     tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    #     model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True).cuda()
-    #     #if instruct model, mark as instruct
-    #     instruct = False
-    #     if "deepseek" in model_name.lower():
-    #         instruct = True
-            
-    #     models[model_name] = (model, tokenizer, instruct)
-        
     models = {}
     for model_name in model_names:
-        #tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-        #model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True).cuda()
-        tokenizer = RobertaTokenizer.from_pretrained(model_name)
-        model = RobertaModel.from_pretrained(model_name).to("cuda").eval()
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True).cuda()
         #if instruct model, mark as instruct
         instruct = False
         if "deepseek" in model_name.lower():
             instruct = True
             
         models[model_name] = (model, tokenizer, instruct)
-        
-        
+
         
     experiments = []
     
-    # for example in eval_dataset:
-    #     task_id = example["task_id"]
-    #     prompt = example["prompt"]
+    
+    
+    for example in eval_dataset:
+        task_id = example["task_id"]
+        prompt = example["prompt"]
         
-    #     for model_name, (model, tokenizer, instruct) in models.items():
-    #         for i in range(iterations):
-    #             experiments.append({
-    #                 "task_id": task_id,
-    #                 "prompt": prompt,
-    #                 "model_name": model_name,
-    #                 "iteration": i
-    #             })
+        for model_name, (model, tokenizer, instruct) in models.items():
+            for i in range(iterations):
+                experiments.append({
+                    "task_id": task_id,
+                    "prompt": prompt,
+                    "model_name": model_name,
+                    "iteration": i
+                })
 
-    # for j in range(len(mbpp_dataset["test"])):
-    #     example = mbpp_dataset["test"][j]
-    #     example["prompt"] = example["text"]# + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
-    #     example['task_id'] = "mbpp/" + str(example['task_id'])
-    #     task_id = example["task_id"]
-    #     prompt = example["prompt"]
+    for j in range(len(mbpp_dataset["test"])):
+        example = mbpp_dataset["test"][j]
+        example["prompt"] = example["text"] + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
+        example['task_id'] = "mbpp/" + str(example['task_id'])
+        task_id = example["task_id"]
+        prompt = example["prompt"]
         
-    #     for model_name, (model, tokenizer, instruct) in models.items():
-    #         for i in range(iterations):
-    #             experiments.append({
-    #                 "task_id": task_id,
-    #                 "prompt": prompt,
-    #                 "model_name": model_name,
-    #                 "iteration": i
-    #             })
+        for model_name, (model, tokenizer, instruct) in models.items():
+            for i in range(iterations):
+                experiments.append({
+                    "task_id": task_id,
+                    "prompt": prompt,
+                    "model_name": model_name,
+                    "iteration": i
+                })
                 
-    # for j in range(len(mbpp_dataset["train"])):
-    #     example = mbpp_dataset["train"][j]
-    #     example["prompt"] = example["text"]# + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
-    #     example['task_id'] = "mbpp/" + str(example['task_id'])
-    #     task_id = example["task_id"]
-    #     prompt = example["prompt"]
+    for j in range(len(mbpp_dataset["train"])):
+        example = mbpp_dataset["train"][j]
+        example["prompt"] = example["text"] + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
+        example['task_id'] = "mbpp/" + str(example['task_id'])
+        task_id = example["task_id"]
+        prompt = example["prompt"]
         
-    #     for model_name, (model, tokenizer, instruct) in models.items():
-    #         for i in range(iterations):
-    #             experiments.append({
-    #                 "task_id": task_id,
-    #                 "prompt": prompt,
-    #                 "model_name": model_name,
-    #                 "iteration": i
-    #             })
+        for model_name, (model, tokenizer, instruct) in models.items():
+            for i in range(iterations):
+                experiments.append({
+                    "task_id": task_id,
+                    "prompt": prompt,
+                    "model_name": model_name,
+                    "iteration": i
+                })
     
-    # for j in range(len(mbpp_dataset["validation"])):
-    #     example = mbpp_dataset["validation"][j]
-    #     example["prompt"] = example["text"]# + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
-    #     example['task_id'] = "mbpp/" + str(example['task_id'])
-    #     task_id = example["task_id"]
-    #     prompt = example["prompt"]
+    for j in range(len(mbpp_dataset["validation"])):
+        example = mbpp_dataset["validation"][j]
+        example["prompt"] = example["text"] + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
+        example['task_id'] = "mbpp/" + str(example['task_id'])
+        task_id = example["task_id"]
+        prompt = example["prompt"]
         
-    #     for model_name, (model, tokenizer, instruct) in models.items():
-    #         for i in range(iterations):
-    #             experiments.append({
-    #                 "task_id": task_id,
-    #                 "prompt": prompt,
-    #                 "model_name": model_name,
-    #                 "iteration": i
-    #             })
+        for model_name, (model, tokenizer, instruct) in models.items():
+            for i in range(iterations):
+                experiments.append({
+                    "task_id": task_id,
+                    "prompt": prompt,
+                    "model_name": model_name,
+                    "iteration": i
+                })
                 
-    # for j in range(len(mbpp_dataset["prompt"])):
-    #     example = mbpp_dataset["prompt"][j]
-    #     example["prompt"] = example["text"]# + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
-    #     example['task_id'] = "mbpp/" + str(example['task_id'])
-    #     task_id = example["task_id"]
-    #     prompt = example["prompt"]
+    for j in range(len(mbpp_dataset["prompt"])):
+        example = mbpp_dataset["prompt"][j]
+        example["prompt"] = example["text"] + " Your code should satisfy these tests:\n\n" + "\n".join(example["test_list"][:3])
+        example['task_id'] = "mbpp/" + str(example['task_id'])
+        task_id = example["task_id"]
+        prompt = example["prompt"]
         
-    #     for model_name, (model, tokenizer, instruct) in models.items():
-    #         for i in range(iterations):
-    #             experiments.append({
-    #                 "task_id": task_id,
-    #                 "prompt": prompt,
-    #                 "model_name": model_name,
-    #                 "iteration": i
-    #             })
-    mbpp_combined = concatenate_datasets([
-        mbpp_dataset["train"],
-        mbpp_dataset["test"],
-        mbpp_dataset["validation"],
-        mbpp_dataset["prompt"]
-    ])
-    
-    all_prompts = list(mbpp_combined["text"]) + list(eval_dataset["prompt"])
-    for i in range(iterations):
-        experiments.append({
-            "task_id": "combined",
-            "prompt": "all",
-            "model_name": "microsoft/codebert-base",
-            "iteration": i
-        })
+        for model_name, (model, tokenizer, instruct) in models.items():
+            for i in range(iterations):
+                experiments.append({
+                    "task_id": task_id,
+                    "prompt": prompt,
+                    "model_name": model_name,
+                    "iteration": i
+                })
 
 
     samples = []
@@ -410,7 +313,7 @@ def main(model_names, batch_number, sleep_seconds, iterations=10):
     
     ##warmup
     base_warmed_up = False
-    instruct_warmed_up = True
+    instruct_warmed_up = False
     for experiment in experiments:
         task_id = experiment["task_id"]
         prompt = experiment["prompt"]
@@ -419,16 +322,12 @@ def main(model_names, batch_number, sleep_seconds, iterations=10):
         instruct = models[model_name][2]
         
         model, tokenizer, instruct = models[model_name]
-        #repeats = 200
-        #prompts = np.repeat(prompt, repeats).tolist()
-        prompts = all_prompts
         
         
         #Warmup GPU on each model with 50 generations
         if instruct == False and not base_warmed_up:
             for _ in range(50):
-                #completion = generate_Qwen(experiment, tokenizer, model)
-                embed_texts(prompts, tokenizer, model, 1)
+                completion = generate_Qwen(experiment, tokenizer, model)
             base_warmed_up = True
         elif instruct == True and not instruct_warmed_up:
             for _ in range(50):
@@ -445,15 +344,11 @@ def main(model_names, batch_number, sleep_seconds, iterations=10):
         model_name = experiment["model_name"]
         iteration = experiment["iteration"]        
         model, tokenizer, instruct = models[model_name]
-        #repeats = 200
-        #prompts = np.repeat(prompt, repeats).tolist()
-        prompts = all_prompts
         
         time.sleep(sleep_seconds)
         start_time = time.time()
         if instruct == False:
-            #completion = generate_Qwen(experiment, tokenizer, model)
-            embed_texts(prompts, tokenizer, model, 1)
+            completion = generate_Qwen(experiment, tokenizer, model)
         else:
             completion = generate_one(experiment, tokenizer, model)
         end_time = time.time()
@@ -462,13 +357,13 @@ def main(model_names, batch_number, sleep_seconds, iterations=10):
             "prompt": prompt,
             "model_name": model_name,
             "iteration": iteration,
-            #"completion": completion,
+            "completion": completion,
             #"repeats": repeats,
             "start_time": start_time,
             "end_time": end_time
         })
 
-    filename = f"results/{batch_number}.json"
+    filename = f"results/MBPPHE/{batch_number}.json"
 
     with open(filename, "w") as f:
         json.dump(samples, f, indent=4)
@@ -484,7 +379,7 @@ if __name__ == "__main__":
     
     #model_names = ["deepseek-ai/deepseek-coder-1.3b-instruct"]#, "deepseek-ai/deepseek-coder-6.7b-instruct"]
     #model_names = ["deepseek-ai/deepseek-coder-1.3b-instruct"]
-    #model_names = ["Qwen/Qwen2.5-Coder-3B-Instruct", "deepseek-ai/deepseek-coder-1.3b-instruct"]
-    model_names = ["microsoft/codebert-base"]
+    model_names = ["Qwen/Qwen2.5-Coder-3B-Instruct", "deepseek-ai/deepseek-coder-1.3b-instruct"]
+    #model_names = ["microsoft/codebert-base"]
     
     main(model_names, args.batch, args.sleep)
