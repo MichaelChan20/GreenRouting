@@ -793,10 +793,10 @@ def run_plot():
 
 
     # ---- Plot baseline line ----
-    plt.plot(baseline_acc, baseline_energy, linestyle='--', color='blue', alpha=0.7, label='Baseline')
+    plt.plot(baseline_acc[0:2], baseline_energy[0:2], linestyle='--', color='blue', alpha=0.7, label='Baseline')
 
     # ---- Plot baseline endpoints as points ----
-    plt.scatter(baseline_acc, baseline_energy, color='blue', s=50, zorder=5)
+    plt.scatter(baseline_acc[0:2], baseline_energy[0:2], color='blue', s=50, zorder=5)
 
     # ---- Annotate baseline points ----
     plt.annotate("Deepseek",
