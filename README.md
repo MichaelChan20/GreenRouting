@@ -32,7 +32,7 @@ Finally the routers can be trained and evaluated by running. This can take up to
 ```
 evaluateRouter.py --reproduce
 ```
-Alternatively the plots can be regenerated from result checkpoints files located in the Data/ folder.
+Alternatively the plots can be regenerated from result checkpoints files located in the /Data folder.
 ```
 evaluateRouter.py --plot
 ```
